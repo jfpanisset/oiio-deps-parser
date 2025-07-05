@@ -216,7 +216,7 @@ class GitHubActionsDependencyParser:
             elif "the following dependencies were found but were too old:" in clean_line.lower():
                 current_section = "dependencies_too_old"
                 continue
-            elif "The following dependencies were not found" in clean_line.lower():
+            elif "the following dependencies were not found" in clean_line.lower():
                 current_section = "dependencies_not_found"
                 continue
             
