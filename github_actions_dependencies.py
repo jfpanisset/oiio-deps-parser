@@ -39,26 +39,26 @@ class GitHubActionsDependencyParser:
         repo = path_parts[1]
         return owner, repo
     
-    def get_successful_jobs(self, owner: str, repo: str, target_date: date, workflow_name: str = "CI") -> List[Dict]:
+    def get_successful_jobs(self, owner: str, repo: str, target_date: date, workflow_name: str = "CI", max_jobs: Optional[int] = None) -> List[Dict]:
         """Retrieve successful GitHub Actions jobs for a specific date and workflow."""
         try:
             repository = self.github.get_repo(f"{owner}/{repo}")
             workflows = repository.get_workflows()
-            
+ 
             successful_jobs = []
-            
+ 
             for workflow in workflows:
                 # Only process workflows that match the specified name
                 if workflow.name != workflow_name:
                     continue
-                    
+ 
                 try:
                     runs = workflow.get_runs()
                     print(f"Found runs for workflow {workflow.name}")
                     run_count = 0
                     for run in runs:
                         run_count += 1
-                            
+ 
                         # Check if run was created on target date and was successful
                         run_date = run.created_at.date()
                         if run_date == target_date and run.conclusion == "success":
@@ -76,6 +76,11 @@ class GitHubActionsDependencyParser:
                                         'job_name': job.name,
                                         'job_conclusion': job.conclusion
                                     })
+ 
+                                    # Check if we've reached the maximum number of jobs to process
+                                    if max_jobs is not None and len(successful_jobs) >= max_jobs:
+                                        print(f"Reached maximum jobs limit ({max_jobs}), stopping processing")
+                                        return successful_jobs
                             except Exception as e:
                                 print(f"Warning: Could not retrieve jobs for run {run.id}: {e}")
                                 continue
@@ -219,6 +224,7 @@ class GitHubActionsDependencyParser:
             elif "the following dependencies were not found" in clean_line.lower():
                 current_section = "dependencies_not_found"
                 continue
+            section_key = current_section
             
             # Parse package entries (lines that look like package names)
             if current_section and clean_line:
@@ -234,37 +240,41 @@ class GitHubActionsDependencyParser:
                     version_match = re.search(r'(\S+) \(([^)]+)\)$', clean_line)
                 elif current_section == "dependencies_not_found":
                     # Try to extract version not found if present with optional BUILT LOCALLY
+                    print(f"Parsing dependency: {clean_line}")
                     version_match = re.search(r'(\S+) (\S+)  \((\S+) BUILT LOCALLY\)$', clean_line)
                     if version_match:
-                        current_section = "dependencies_built_locally"
+                        section_key = "dependencies_built_locally"
+                    else:
                         version_match = re.search(r'(\S+) (\S+)$', clean_line)
 
                 if version_match:
                     package_name = version_match.group(1)
                     version = version_match.group(2)
-                    dependencies[current_section].append({
+                    dependencies[section_key].append({
                         "package": package_name,
                         "version": version
                     })
                 else:
                     # No version found, just package name
-                    dependencies[current_section].append({
+                    dependencies[section_key].append({
                         "package": clean_line,
                         "version": None
                     })
 
         return dependencies
     
-    def process_repository(self, github_url: str, target_date: date, workflow_name: str = "CI") -> Dict:
+    def process_repository(self, github_url: str, target_date: date, workflow_name: str = "CI", max_jobs: Optional[int] = None) -> Dict:
         """Main method to process a repository and extract dependency information."""
         try:
             owner, repo = self.parse_github_url(github_url)
             print(f"Processing repository: {owner}/{repo}")
             print(f"Target date: {target_date}")
             print(f"Workflow name: {workflow_name}")
+            if max_jobs is not None:
+                print(f"Maximum jobs to process: {max_jobs}")
             
             # Get successful jobs
-            successful_jobs = self.get_successful_jobs(owner, repo, target_date, workflow_name)
+            successful_jobs = self.get_successful_jobs(owner, repo, target_date, workflow_name, max_jobs)
             print(f"Found {len(successful_jobs)} successful jobs")
             
             results = {
@@ -340,6 +350,11 @@ def main():
         help="Workflow name to filter runs (default: CI)"
     )
     parser.add_argument(
+        "--max-jobs",
+        type=int,
+        help="Maximum number of jobs to process (default: unlimited)"
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Test the script without making API calls (uses sample data)"
@@ -392,7 +407,7 @@ def main():
         results = sample_results
     else:
         # Process repository
-        results = parser_obj.process_repository(args.url, target_date, args.workflow)
+        results = parser_obj.process_repository(args.url, target_date, args.workflow, args.max_jobs)
     
     # Output results
     json_output = json.dumps(results, indent=2)

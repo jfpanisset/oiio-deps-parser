@@ -49,6 +49,9 @@ uv run python github_actions_dependencies.py --workflow "docs"
 
 # Save output to file
 uv run python github_actions_dependencies.py --output results.json
+
+# Limit the number of jobs processed (for faster testing)
+uv run python github_actions_dependencies.py --max-jobs 5
 ```
 
 ### Command Line Options
@@ -58,6 +61,7 @@ uv run python github_actions_dependencies.py --output results.json
 - `--token`: GitHub API token (optional, but recommended for higher rate limits)
 - `--output`: Output file for JSON results (default: stdout)
 - `--workflow`: Workflow name to filter jobs (default: CI)
+- `--max-jobs`: Maximum number of jobs to process (default: unlimited, useful for faster testing)
 - `--dry-run`: Test the script without making API calls (uses sample data)
 
 ### GitHub API Token
@@ -133,6 +137,9 @@ uv run python github_actions_dependencies.py --workflow "CI" --date 2024-01-15 -
 
 # Test the script without API calls
 uv run python github_actions_dependencies.py --dry-run --output test.json
+
+# Quick test with limited jobs
+uv run python github_actions_dependencies.py --max-jobs 3 --date 2024-01-15 --output quick_test.json
 ```
 
 ## Error Handling
